@@ -3,6 +3,9 @@ from flask_jwt_extended import JWTManager, jwt_required, create_access_token
 from flask_sqlalchemy import SQLAlchemy
 import logging
 import pymysql
+from werkzeug.security import generate_password_hash, check_password_hash
+# https://stackoverflow.com/questions/58452887/how-can-i-utilize-werkzeug-securitys-check-password-hash-function-to-verify-cor
+from cryptography.fernet import Fernet
 from sqlalchemy.exc import IntegrityError
 import mysql.connector
 import re
@@ -19,8 +22,13 @@ app.config['JWT_HEADER_NAME'] = 'Authorization'
 app.config['JWT_HEADER_TYPE'] = 'Bearer'
 # https://juncotic.com/autenticacion-con-jwt-en-flask/
 # https://www.freecodecamp.org/news/jwt-authentication-in-flask/
+
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
+ENCRYPTION_KEY = 'bQZFNq29Mg1JgghbNxdzDjEN7PfdYeGoBlDtjKMQS9U='
+# https://unipython.com/flask-autenticacion-y-registro-de-usuarios/
+cipher_suite = Fernet(ENCRYPTION_KEY)
+# https://stackoverflow.com/questions/68424665/error-decrypting-file-stored-in-a-mysql-db-using-flask-and-cryptography
 
 logging.basicConfig(filename='api.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -51,6 +59,7 @@ class ScanResult(db.Model):
 
 
 @app.errorhandler(Exception)
+# https://flask.palletsprojects.com/en/2.3.x/errorhandling/
 def handle_global_error(error):
     code = 500
     if isinstance(error, IntegrityError):
@@ -111,7 +120,8 @@ def register():
         if not data or not data.get('username') or not data.get('password'):
             return jsonify({"error": "Username and password are required"}), 400
 
-        new_user = User(username=data['username'], password=data['password'])
+        hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+        new_user = User(username=data['username'], password=hashed_password)
         db.session.add(new_user)
         db.session.commit()
         return jsonify({'message': 'User registered successfully', 'user_id': new_user.id}), 201
@@ -126,7 +136,7 @@ def login():
         return jsonify({"error": "Username and password are required"}), 400
 
     user = User.query.filter_by(username=data['username']).first()
-    if not user or user.password != data['password']:
+    if not user or not check_password_hash(user.password, data['password']):
         logging.warning(f'Failed login attempt for user: {data["username"]}')
         return jsonify({'message': 'Login failed! Check your credentials'}), 401
 
@@ -143,11 +153,14 @@ def add_database():
         if not data or not data.get('host') or not data.get('password') or not data.get('username'):
             return jsonify({"error": "Host, username, and password are required"}), 400
 
+        encrypted_host = cipher_suite.encrypt(data['host'].encode()).decode()
+        encrypted_password = cipher_suite.encrypt(data['password'].encode()).decode()
+
         new_db = DatabaseConnection(
-            host=data['host'],
+            host=encrypted_host,
             port=data['port'],
             username=data['username'],
-            password=data['password'],
+            password=encrypted_password,
             database_name=data['database_name']
         )
         db.session.add(new_db)
@@ -166,10 +179,12 @@ def scan_database(id):
         if not connection:
             return jsonify({"error": "Database connection not found"}), 404
 
+        decrypted_host = cipher_suite.decrypt(connection.host.encode()).decode()
+        decrypted_password = cipher_suite.decrypt(connection.password.encode()).decode()
         db_conn = mysql.connector.connect(
-            host=connection.host,
+            host=decrypted_host,
             user=connection.username,
-            password=connection.password,
+            password=decrypted_password,
             port=connection.port,
             database=connection.database_name
         )

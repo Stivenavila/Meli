@@ -1,9 +1,32 @@
-from flask import Flask
+from flask import Flask, jsonify
+from flask_jwt_extended import jwt_required
+from flask_sqlalchemy import SQLAlchemy
+
+from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:MyN3wP4ssw0rd@localhost/classifier_db?charset=utf8mb4'
+
+db = SQLAlchemy(app)
+class DatabaseConnection(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    host = db.Column(db.String(255), nullable=False)
+    port = db.Column(db.Integer, nullable=False)
+    username = db.Column(db.String(255), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    database_name = db.Column(db.String(255), nullable=False)
 
 @app.errorhandler(Exception)
-def handle_global_error():
+def handle_global_error(error):
+    code = 500
+    if isinstance(error, IntegrityError):
+        code = 400
+        db.session.rollback()
+        return jsonify({"error": "IntegrityError", "message": str(error.orig)}), code
+    if isinstance(error, KeyError):
+        code = 400
+        return jsonify({"error": "KeyError", "message": str(error)}), code
+    return jsonify({"error": "ServerError", "message": str(error)}), code
 
 
 @app.route('/api/v1/database/scan/<int:id>/summary', methods=['GET'])

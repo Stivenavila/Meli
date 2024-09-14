@@ -19,6 +19,11 @@ services:
       - "5000:5000"
     depends_on:
       - db
+    environment:
+      DATABASE_URI: mysql+pymysql://root:MyN3wP4ssw0rd@db/classifier_db?charset=utf8mb4
+      FLASK_SECRET_KEY: superstructure
+      JWT_SECRET_KEY: superstructure
+      ENCRYPTION_KEY: bQZFNq29Mg1JgghbNxdzDjEN7PfdYeGoBlDtjKMQS9U=
 
 volumes:
   db_data:

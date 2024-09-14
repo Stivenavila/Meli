@@ -1,8 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, json
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token
 from flask_sqlalchemy import SQLAlchemy
 import logging
 import pymysql
+import os
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 # https://stackoverflow.com/questions/58452887/how-can-i-utilize-werkzeug-securitys-check-password-hash-function-to-verify-cor
 from cryptography.fernet import Fernet
@@ -14,9 +17,9 @@ from flask import render_template
 pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:MyN3wP4ssw0rd@db/classifier_db?charset=utf8mb4'
-app.config['SECRET_KEY'] = 'superstructure'
-app.config['JWT_SECRET_KEY'] = 'superstructure'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI')
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY')
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
 app.config['JWT_TOKEN_LOCATION'] = ['headers']
 app.config['JWT_HEADER_NAME'] = 'Authorization'
 app.config['JWT_HEADER_TYPE'] = 'Bearer'
@@ -25,12 +28,15 @@ app.config['JWT_HEADER_TYPE'] = 'Bearer'
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-ENCRYPTION_KEY = 'bQZFNq29Mg1JgghbNxdzDjEN7PfdYeGoBlDtjKMQS9U='
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
 # https://unipython.com/flask-autenticacion-y-registro-de-usuarios/
 cipher_suite = Fernet(ENCRYPTION_KEY)
 # https://stackoverflow.com/questions/68424665/error-decrypting-file-stored-in-a-mysql-db-using-flask-and-cryptography
 
 logging.basicConfig(filename='api.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+limiter = Limiter(get_remote_address, app=app, default_limits=["5 per minute"])
+# https://www.linkedin.com/advice/0/what-flask-limiter-how-can-used-implement-rate-uvknc?lang=es&originalSubdomain=es
+# https://flask-limiter.readthedocs.io/en/stable/
 
 
 class User(db.Model):
@@ -60,7 +66,7 @@ class ScanResult(db.Model):
 
 @app.errorhandler(Exception)
 # https://flask.palletsprojects.com/en/2.3.x/errorhandling/
-def handle_global_error(error):
+def handle_global_error(error: json) -> json:
     code = 500
     if isinstance(error, IntegrityError):
         code = 400
@@ -74,7 +80,7 @@ def handle_global_error(error):
 
 @app.route('/api/v1/database/scan/<int:id>/summary', methods=['GET'])
 @jwt_required()
-def scan_summary(id):
+def scan_summary(id: int) -> json:
     try:
         scan_data = {
             "database_connection": [
@@ -114,11 +120,15 @@ def scan_summary(id):
 
 
 @app.route('/api/v1/register', methods=['POST'])
-def register():
+def register() -> json:
     try:
         data = request.get_json()
         if not data or not data.get('username') or not data.get('password'):
             return jsonify({"error": "Username and password are required"}), 400
+
+        username = data.get('username')
+        if not re.match("^[a-zA-Z0-9_]+$", username):
+            return jsonify({"error": "Invalid username. Only letters, numbers, and underscores are allowed."}), 400
 
         hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
         new_user = User(username=data['username'], password=hashed_password)
@@ -130,7 +140,8 @@ def register():
 
 
 @app.route('/api/v1/login', methods=['POST'])
-def login():
+@limiter.limit("5 per minute")
+def login() -> json:
     data = request.get_json()
     if not data or not data.get('username') or not data.get('password'):
         return jsonify({"error": "Username and password are required"}), 400
@@ -147,7 +158,7 @@ def login():
 
 @app.route('/api/v1/database', methods=['POST'])
 @jwt_required()
-def add_database():
+def add_database() -> json:
     try:
         data = request.get_json()
         if not data or not data.get('host') or not data.get('password') or not data.get('username'):
@@ -173,7 +184,7 @@ def add_database():
 
 @app.route('/api/v1/database/scan/<int:id>', methods=['POST'])
 @jwt_required()
-def scan_database(id):
+def scan_database(id: int) -> json:
     try:
         connection = db.session.get(DatabaseConnection, id)
         if not connection:
@@ -276,7 +287,7 @@ def scan_database(id):
 
 @app.route('/api/v1/database/scan/<int:id>', methods=['GET'])
 @jwt_required()
-def get_scan_results(id):
+def get_scan_results(id: int) -> json:
     try:
         results = ScanResult.query.filter_by(database_id=id).all()
         if not results:

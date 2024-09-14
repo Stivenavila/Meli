@@ -3,6 +3,7 @@ services:
     image: mysql:8.0
     restart: always
     environment:
+      MYSQL_USER: root
       MYSQL_ROOT_PASSWORD: MyN3wP4ssw0rd
       MYSQL_PASSWORD: MyN3wP4ssw0rd
     ports:

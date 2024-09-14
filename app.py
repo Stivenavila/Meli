@@ -14,7 +14,7 @@ from flask import render_template
 pymysql.install_as_MySQLdb()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:MyN3wP4ssw0rd@localhost/classifier_db?charset=utf8mb4'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:MyN3wP4ssw0rd@db/classifier_db?charset=utf8mb4'
 app.config['SECRET_KEY'] = 'superstructure'
 app.config['JWT_SECRET_KEY'] = 'superstructure'
 app.config['JWT_TOKEN_LOCATION'] = ['headers']
@@ -296,4 +296,4 @@ def get_scan_results(id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')

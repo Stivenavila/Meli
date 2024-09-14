@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Scan Summary</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Database Scan Summary</h1>
+
+    {% if total_tables > 0 %}
+        <h2>Total Tables Scanned: {{ total_tables }}</h2>
+        <h3>Sensitive Columns Found: {{ sensitive_columns_count }}</h3>
+
+        {% for table_name, columns in scan_data.items() %}
+            {% if columns %}
+                <h3>Table: {{ table_name }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Column Name</th>
+                            <th>Data Type</th>
+                            <th>Information Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for column in columns %}
+                            <tr>
+                                <td>{{ column.column_name }}</td>
+                                <td>{{ column.data_type }}</td>
+                                <td>{{ column.information_type }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No columns found for table: {{ table_name }}</p>
+            {% endif %}
+        {% endfor %}
+    {% else %}
+        <h3>No tables were found in this scan.</h3>
+    {% endif %}
+</body>
+</html>

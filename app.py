@@ -17,6 +17,7 @@ class DatabaseConnection(db.Model):
     database_name = db.Column(db.String(255), nullable=False)
 
 @app.errorhandler(Exception)
+# https://flask.palletsprojects.com/en/2.3.x/errorhandling/
 def handle_global_error(error):
     code = 500
     if isinstance(error, IntegrityError):

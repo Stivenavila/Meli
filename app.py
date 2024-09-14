@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token
 from flask_sqlalchemy import SQLAlchemy
 import logging
 import pymysql
 from sqlalchemy.exc import IntegrityError
 import mysql.connector
+import re
 from flask import render_template
 
 pymysql.install_as_MySQLdb()
@@ -11,8 +13,14 @@ pymysql.install_as_MySQLdb()
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:MyN3wP4ssw0rd@localhost/classifier_db?charset=utf8mb4'
 app.config['SECRET_KEY'] = 'superstructure'
-
+app.config['JWT_SECRET_KEY'] = 'superstructure'
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+app.config['JWT_HEADER_NAME'] = 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'
+# https://juncotic.com/autenticacion-con-jwt-en-flask/
+# https://www.freecodecamp.org/news/jwt-authentication-in-flask/
 db = SQLAlchemy(app)
+jwt = JWTManager(app)
 
 logging.basicConfig(filename='api.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -56,6 +64,7 @@ def handle_global_error(error):
 
 
 @app.route('/api/v1/database/scan/<int:id>/summary', methods=['GET'])
+@jwt_required()
 def scan_summary(id):
     try:
         scan_data = {
@@ -99,7 +108,7 @@ def scan_summary(id):
 def register():
     try:
         data = request.get_json()
-        if not data or not data.get('username') or not data.get('password')):
+        if not data or not data.get('username') or not data.get('password'):
             return jsonify({"error": "Username and password are required"}), 400
 
         new_user = User(username=data['username'], password=data['password'])
@@ -121,11 +130,13 @@ def login():
         logging.warning(f'Failed login attempt for user: {data["username"]}')
         return jsonify({'message': 'Login failed! Check your credentials'}), 401
 
+    access_token = create_access_token(identity=user.username)
     logging.info(f'User {user.username} logged in successfully')
-    return jsonify({'message': 'Login successful'}), 200
+    return jsonify({'access_token': access_token}), 200
 
 
 @app.route('/api/v1/database', methods=['POST'])
+@jwt_required()
 def add_database():
     try:
         data = request.get_json()
@@ -148,6 +159,7 @@ def add_database():
 
 
 @app.route('/api/v1/database/scan/<int:id>', methods=['POST'])
+@jwt_required()
 def scan_database(id):
     try:
         connection = db.session.get(DatabaseConnection, id)
@@ -248,6 +260,7 @@ def scan_database(id):
 
 
 @app.route('/api/v1/database/scan/<int:id>', methods=['GET'])
+@jwt_required()
 def get_scan_results(id):
     try:
         results = ScanResult.query.filter_by(database_id=id).all()
